@@ -1,0 +1,36 @@
+
+PARSER_BEGIN(Parser)
+import ast.*;
+
+
+public class Parser {
+  public static void main(String[] args) {
+     new Parser(System.in);
+     try {
+       byte[] encoded = Files.readAllBytes(Paths.get("./WideMargins.tex"));
+       System.out.println(new String(encoded));
+
+       Defn[] program = Top();
+       new IndentOutput(System.out).indent(program);
+     } catch (ParseException e) {
+       System.out.println("Invalid syntax at ("
+                          + token.beginColumn + ","
+                          + token.beginLine + "), "
+                          + token.image);
+     } catch (TokenMgrError e) {
+       System.out.println(e.getMessage());
+     }
+  }
+}
+PARSER_END(Parser)
+
+
+TOKEN : {
+/* Syntax example here
+  <IDENT      : <ALPHA> (<ALPHANUM>)* >
+| <INTLIT     : (<NUM>)+ >
+| <#ALPHA     : ["a"-"z"] | ["A"-"Z"] >
+| <#NUM       : ["0"-"9"] >
+| <#ALPHANUM  : <ALPHA> | <NUM> >
+| <FLOATLIT   : (<NUM>)+ "." (<NUM>)+ >*/
+}
