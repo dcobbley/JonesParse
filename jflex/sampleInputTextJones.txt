@@ -1,0 +1,792 @@
+------------------------------------------------------------------------
+CS 321 Languages and Compiler Design I, Winter 2015
+
+Assignment 4: "Static"
+------------------------------------------------------------------------
+
+This is the fourth and final homework assignment for CS 321.
+
+Submission Procedure:
+---------------------
+Submissions to this assignment are formally due at noon on Monday,
+March 16.  This is the same day as the final exam.  That said, the
+dropbox for submissions will remain open until noon on Wednesday,
+March 18, and submissions received by that later time will be accepted
+without penalty.  I'm making this arrangement because:
+
+- I really want you to focus on being done by (or, ideally, before
+  March 16).  In particular, I expect to be busy grading final exam
+  papers in the days immediately after March 16, so I likely won't
+  be around to give much help with last minute homework questions.
+
+- I want to give you a little flexibility, particularly so that you
+  are able to find time to prepare for the final (which, incidentally,
+  is worth TWICE as many points in the overall grading scheme as this
+  assignment).
+
+- I want to emphasize that noon on March 18 really is the absolute
+  latest time that I can accept work for grading.  I may not be able
+  to meet the university's grading deadlines for anything that is sent
+  to me after that.
+
+To submit your solution to this assignment, you will be expected to
+create a zip file using a command of the following form:
+
+  zip -r9 YOURNAMEGOESHERE.zip ast/*.java extras.txt
+
+The "extras.txt" part on the end is only needed if you have attempted
+the extra credit portion of this assignment that is described at the
+end of this document.  Once you have created the zip file, you should
+upload it to the dropbox on D2L.  You should not include any additional
+materials.
+
+Time Management, and Asking for Help:
+-------------------------------------
+This exercise is expected to take a total of between 4 and 12 hours
+to complete, depending on your level of programming experience, and
+including approximately one hour of focused time to read this
+document.  Add extra time to this if you haven't already worked
+through the recent slides and lab materials.
+
+Note that you may not be able to finish the full assignment in this
+time; the best strategy is to start early, and to be ready to ask
+questions if you get stuck or need clarification.
+
+Of course, there is much to be learned by trying to solve problems
+like this on your own.  However, given the timing constraints, you
+simply don't have the luxury of being able to spend, say, four hours
+trying to figure out some small detail by yourself.  Instead, if you
+find yourself struggling with something for, say an hour, then stop,
+and spend some time instead to formulate a question, as precisely as
+you can, that describes the problem you're having.  Maybe it's
+something in the text that doesn't make sense?  Or maybe you know
+what you want the program to do, but you don't know how to express
+it?  Once that's done, post your question on D2L, or come talk to the
+TA or the instructor.  We'll do our best to get you pointed in the
+right direction as quickly as we can, and you will have spent a lot
+less on this than the four hours it might have taken on your own.
+
+Please do not feel bad about asking for help.  After all, that is the
+way that the real world works: we partner with colleagues in a team,
+or interact with our customers to get a better understanding about
+what they need.  And of course, we all frequently reach out to online
+resources like Google for help.  From that perspective, asking the TA
+or instructor for some assistance really isn't so very different.
+(And in case you were worrying about it: I promise that we won't
+count asking for help against you when it comes to grading!)
+
+While you can contact the TA and/or instructor directly, I encourage
+you to post questions on D2L whenever possible, so long as that
+doesn't involve sharing solutions.  Because D2L reaches a larger
+audience, I prioritize responding to postings there over responding
+to individual messages.  In addition, if you post to D2L, then you
+may well get a faster reply, perhaps from a friendly classmate, for
+example, who had struggled through a similar issue.  In fact, I am
+considering options to award some small amount of extra credit to
+students who help other students on D2L (so long, again, as that
+doesn't involve sharing details of solutions).
+
+Now it's time for the technical material ...
+
+------------------------------------------------------------------------
+Building a Static Analyzer:
+---------------------------
+With the successful conclusion of Homework 3, you have built a parser
+that can read source text and generate corresponding abstract syntax
+trees for a simple, but realistic programming language.  The parser
+is able to determine if the program contains any syntax errors, but
+of course there are common programming errors that it is not able to
+detect.  The following (yes, rather lengthy) list describes some of
+the additional properties that we would expect to hold in valid
+programs.  It will be the job of the static analysis components of
+the compiler to check that these properties are satisfied.  And it
+will be your job in this assignment to complete the implementation of
+that static analysis component!
+
+
+READ HERE
+
+EXAMPLES OF STATIC ANALYSIS PROPERTIES:
+---------------------------------------
+Each of the following property descriptions includes a label, written
+in CamelCase.  These labels will be used throughout this assignment
+to reference individual properties within this list.
+
+MainDefined
+  Every program should contain a definition of a function called
+  main.
+
+MainVoid
+  The main function should have void return type.
+
+MainNoParameters
+  The main function should not have any formal parameters.
+
+FunctionNamesUnique
+  A program cannot contain two functions with the same name.  [But
+  it is permitted for a function to have the same name as a global
+  variable defined elsewhere in the same program: we say that "the
+  namespaces for functions and globals are disjoint".]
+
+FormalsUnique
+  The list of formal parameters in a function declaration cannot
+  contain two variables with the same name.
+
+GlobalsUnique
+  A program cannot contain two global variables with the same
+  name.
+
+GlobalsInitialized
+  Every variable introduced in a global variable declaration must
+  specify an initializer expression.  [This condition could have
+  been enforced by the parser, but we will implement it as part of
+  static analysis instead.]
+
+GlobalsNoCalls
+  The initializer expression in a global variable declaration must
+  not include any function calls.  [We want to avoid situations in
+  which the called function could access a global variable that
+  has not yet been initialized.]
+
+IfBoolean
+  The test expression in an "if" statement must have type boolean.
+
+WhileBoolean
+  The test expression in a "while" statement must have type
+  boolean.
+
+PrintArgument
+  The expression in a print statement can have any type (int,
+  double, or boolean).
+
+ReturnValueRequired
+  Return statements of the form "return;" (i.e., without an
+  expression specifying a return value) are not allowed in the
+  body of functions that have a non-void return type.
+
+ReturnVoidRequired
+  Return statements of the form "return e;" (i.e., with an
+  expression specifying a return value) are not allowed in the
+  body of functions that have a void return type.
+
+ReturnType
+  If a "return e;" statement appears in the body of a function
+  with a non-void return type, then the type of e must match the
+  return type of the function.  Note, however, that it is
+  permitted to return a value of type int in a function
+  with return type double, or to return a value of type double
+  in a function with return type double.
+
+InitVarEntryType
+  The type of the expression in an initializer in either a local
+  or global declaration should match the type of the variable that
+  is being defined.  As in previous cases, however, an expression
+  of type int or double may be used in places where an expression
+  of double or int, respectively, is expected.  In these cases,
+  the expectation is that the value produced by the initializer
+  expression will be cast to match the type of the variable that
+  is being initialized.
+
+LocalsUnique
+  A local variable declaration cannot contain two variables with
+  the same name.  [But it is permitted for a local variable
+  declaration to use a variable name that has previously been
+  introduced in the same function, either as a parameter name or
+  in a separate local variable declaration, effectively hiding the
+  earlier definition of that name.]
+
+VarDefined
+  Any variable name that is used in a program, including any use
+  on the left hand side of an assignment, must have an associated
+  definition, either in a preceding local declaration or parameter
+  list, or in a global declaration.  Any variable that is
+  mentioned in the initializer portion of a global variable
+  declaration must have been defined in an earlier global variable
+  declaration.  (Either earlier in the same list of variable
+  introductions, or in a separate globals declaration earlier in
+  the program.)
+
+  [Note that it is permitted to reference a global variable in the
+  body of a function, even if the declaration of that global
+  variable appears after the definition of the function in the
+  source program.]
+
+ArithBinArgsNumeric
+  The arguments of an arithmetic operator (+, -, *, or /) must
+  both be of numeric type (int or double).  If the arguments are
+  of the same type, then the result will also have that same type.
+  If one of the arguments has type int and the other has type
+  double, then the return type will be double.
+
+RelBinArgs:
+  The relational operators (<, <=, >, >=, ==, or !=) can be used
+  to compare values of any type (i.e., int, double, or boolean).
+  It is permitted to use one argument of type int and the other
+  of type double.  In this situation, the argument of type int
+  will be converted to a double and a floating point comparison
+  operation will be performed at runtime.
+
+LogBinArgsBoolean
+  The arguments of a logical operator (&& or ||) must be of type
+  boolean.  [And the result of using any such operator will be a
+  value of type boolean.]
+
+AssignTypes
+  The type of the expression on the right hand side of an
+  assignment must match the type of the variable that is named on
+  the left hand side.  However, this rule should be relaxed for
+  assignments involving a mixture of numeric types (i.e., an int
+  on one side of the "=" symbol and a double on the other).  In
+  these cases, the value that is produced by the expression on
+  the right hand side of the assign will be converted to match
+  the type of the variable on the left hand side.
+
+CastInt
+  The argument in an IntToDouble cast must be of type int and the
+  result of the cast will be of type double.  (See below for a
+  description of casts.)
+
+CastDouble
+  The argument in a DoubleToInt cast must be of type double and
+  the result of the cast will be of type int.  (See below for a
+  description of casts.)
+
+FunctionDefined
+  Every function that is named in a function call should have a
+  definition in the program.
+
+CallReturnType
+  A function that has return type void should not be called in a
+  context where a value is expected.  (i.e., void functions can
+  only be called from within a statement expression.)
+
+CallNumberOfArgs
+  The number of arguments in a call to a function f must be the
+  same as the number of formal parameters in the definition of f.
+
+FormalTypeMismatch
+  The type of each argument in a function call must match the type
+  of the corresponding formal parameter in the definition of the
+  function.  Note, however, that an expression of type int may be
+  used as an argument where a formal parameter of type double is
+  specified.  Similarly, an expression of type double may be used
+  as an argument where a formal parameter of type int is
+  specified.  In these cases, appropriate casts will be used to
+  convert the actual arguments that are specified in the call
+  to match the types of the corresponding formal parameters.
+
+------------------------------------------------------------------------
+Extensions with respect to Homework 3:
+--------------------------------------
+In reading the above list, you may have noticed a small number of
+new features that were not present in the previous homework:
+
+The double type:
+----------------
+The language has been extended to include a new type, double, that
+represents (double precision) floating point numbers.  We will also
+add support for floating point literals.  These additions require some
+small additions to the code that you have seen previously:
+
+The syntax of floating point literals is described by the following
+regular expression:
+
+|  <FLOATLIT   : (<NUM>)+ "." (<NUM>)+ >
+
+The grammar for types includes an extra line (and there is an extra
+value, Type.DOUBLE, that represents the new double type):
+
+| "double"  { return Type.DOUBLE; }
+
+The grammar for expressions includes a rule for floating point
+literals (and there is a new class, FloatLit, for representing
+floating point literals in abstract syntax trees:
+
+| t=<FLOATLIT> { e = new FloatLit(t.image); })
+
+(Note that we do not attempt to parse floating point literals to
+extract the corresponding numeric values; instead we just pass the
+underlying lexeme---a text string, t.image---as the argument to the
+FloatLit() constructor.)
+
+Casts:
+------
+The abstract syntax includes two new classes, IntToDouble, and
+DoubleToInt, that represent casts or conversion operators.  As the
+name suggests, an IntToDouble node represents an operation that
+converts an integer value in to a corresponding double.  (For example,
+it might convert the integer 1 in to the double value 1.0.)
+Conversely a DoubleToInt node represents an operation that will
+convert a double value to a corresponding value.  (For example, it is
+reasonable to assume that this operation would convert 3.1415, a value
+of type double, into the int value 3.) Note, however, that we will not
+specify exactly what these operations do in all cases at this time;
+doing that will be necessary to describe the dynamic semantics of our
+language, but our sole focus for this assignment is on static
+semantics.
+
+You might notice also that there is no concrete syntax for these case
+operations in our language.  (i.e., they will not be included in any
+abstract syntax tree that is constructed by the parser.) Instead,
+these operations are intended to be inserted in to the abstract syntax
+tree during static analysis.  For example, the following indented
+output shows the abstract syntax tree that the parser will construct
+for an input expression 1+2.3:
+
+  Add
+    IntLit(1)
+    FloatLit(2.3)
+
+According to ArithBinArgsNumeric, however, the combination of an
+integer and a floating point argument will be handled by converting
+the int on the left of the "+" in to a double (using an IntToDouble
+cast) and the performing a double addition on the resulting two
+arguments.  In terms of code, we could execute the following Java
+statement left = new IntToDouble(left) to transform the original
+abstract syntax tree so that it looks like this:
+
+  Add double
+    IntToDouble
+      IntLit(1)
+    FloatLit(2.3)
+
+Note that static analysis is expected to insert an IntToDouble cast
+like this at any point where an expression of type int is used in a
+context where a double is expected (which includes not only arithmetic
+operations like "+", but also comparisons, assignments, return
+statements, and function calls.)  Similarly, static analysis is
+expected to insert a DoubleToInt cast at any point where the source
+program used an expression of type int where a value of type double
+was required.
+
+Type annotations:
+-----------------
+Our language uses the same concrete syntax for adding two int values
+that it does for adding two double values.  When it comes to code
+generation, however, it will be important for the compiler to be able
+to distinguish between these two cases: the assembly code that is
+needed to implement an integer addition is quite different to the code
+that is needed for a floating point addition, for example.  For this
+reason, several of the abstract syntax node classes in the ast folder
+have been modified to include a new "type" attribute.  It is the
+responsibility of static analysis to set these fields (which are
+initialized to null when the abstract syntax nodes are first
+created).  Once these attributes have been set to non-null Type
+values, those types will be displayed as part of the indented
+abstract syntax trees that are produced by running the sample code.
+The following example shows two such annotations, one for the Assign
+node and one for the Add, that have been added as a result of passing
+the expression "x = 1 + 2.3" through static analysis, assuming that "x"
+has been defined previously as a variable of type int:
+
+  Assign int
+    "x"
+    DoubleToInt
+      Add double
+        IntToDouble
+          IntLit(1)
+        FloatLit(2.3)
+
+Type annotations like this are required on all Assign, BinExpr, and
+Print nodes.
+
+------------------------------------------------------------------------
+Supporting Materials:
+---------------------
+This assignment requires the set of supporting materials provided in
+the files hw4-static.tar.gz and hw4-static.zip.  (The content of the
+two files is the same; only the file formats differ, so use whichever
+one seems most natural to you.)
+
+After unpacking the supporting materials (tar xvf hw4-static.tar.gz
+or unzip hw4-static.zip, respectively), you will find a new hw4-static
+directory that contains the following:
+
+Parser.jj -- a JavaCC parser for the language that we studied in
+  Homework 3.  This parser has been extended with the features
+  that were described above for adding the double type and support
+  for floating point literals.  You are welcome to substitute
+  your own Parser.jj if you prefer, provided that you make the
+  corresponding small changes.
+
+  As you would expect, you can obtain the Java code for the Parser
+  by running the command:  javacc Parser.jj
+
+Static.java -- a simple main program for testing the static analysis
+  code.  This can be compiled using the line: javac Static.java
+  Once compiled, you can run this program using commands like:
+        echo "void main() { print 1; }" | java Static 
+  or:   java Static < nameOfFileContainingTestCode
+
+compiler/*.java -- a minimal library for error handling that includes
+  one class for representing errors as objects (the Failure class),
+  and one (the Handler class), that implements a simple error message
+  handler.
+
+ast/*.java -- a collection of classes, most of which correspond to
+  different types of abstract syntax tree nodes.  The main exceptions
+  are:
+
+  - The IndentOutput class, which is used to support the textual
+    display of abstract syntax trees using indentation.
+
+  - The TypeEnv and FunctionEnv classes, which implement simple
+    linked-list data structures used to implement mappings from
+    variable names to types (for global variables, function
+    parameters, and locally defined variables).  These classes are
+    very similar in purpose and structure to the examples of the
+    same name in the Week 8 lab (envlab).
+
+  - The Context class, which is used during static analysis to
+    provide information about the context in which a given
+    expression, statement, or definition appears.  More
+    specifically, Context values are used to store: a TypeEnv
+    environment, called globals, for all of the globally defined
+    variables in the program; a function environment, called
+    functions, that maps function names to Function objects; and
+    an error handler for reporting compile-time errors in given
+    source program.
+
+------------------------------------------------------------------------
+Type Checking Statements:
+-------------------------
+Each of the classes that represents an abstract syntax node for a
+particular form of statement is supposed to contain an implementation
+of the method:
+
+    public TypeEnv check(Context ctxt, TypeEnv locals)
+        throws Failure 
+
+The intention here is that, if stmt is an abstract syntax tree for a
+statement, then a call stmt.check(ctxt, locals) will perform whatever
+tests are necessary to ensure that the statement is valid, using the
+given context for information about the surrounding program, and the
+specified environment for local variables.  The return value is another
+environment, extending the input environment, locals, if necessary,
+with entries for any variables that are defined inside stmt.
+
+As an example, the following code shows the implementation of check()
+in the Block class:
+
+    public TypeEnv check(Context ctxt, TypeEnv locals)
+      throws Failure {
+        TypeEnv inner = locals; 
+        for (int i=0; i<body.length; i++) {
+            inner = body[i].check(ctxt, inner);
+        }
+        return locals;  // Back to original environment outside block
+    }
+
+The code shown here performs recursive calls to check() that each of
+the statements inside the block are valid.  But there are two subtle
+details in here:
+
+- First, the code keeps a pointer to the local variable environment in
+  the variable inner as it moves through the statements in the block.
+  This allows the code to work correctly with a block like:
+
+    { int x = 1 + 2; print x; }
+
+  where the local variable environment for the second statement
+  includes a new environment entry for the variable x, extending
+  whatever environment was in scope for the definition of x at the
+  start of the block.
+
+- Second, the environment that is returned at the end of the block
+  is the same environment, locals, that was given for the start of the
+  block, and not the environment, inner, that was calculated at the
+  end.  This reflects the fact that any local variables that are
+  introduced inside a block, go out of scope when the block ends.
+
+As it happens, however, the supporting materials only provide
+implementations for this method in a very limited set of cases: one
+for Stmt, one for Block, and one for Print.  So, after studying those
+examples, you will need to implement a version of the check() method
+for all of the other classes that correspond to statements.
+
+How will you know if you have provided an implementation for check()
+in all of the different forms of statements?  One easy way to find out
+is to rewrite the current placeholder implementation of check() in the
+Stmt class as an abstract method: this requires adding "abstract" at
+the start of that definition and line and replacing the method body
+with a single semicolon.  Once you've done that, the Java compiler
+will generate an error message for any class that requires but is
+missing an implementation of check().
+
+------------------------------------------------------------------------
+Type Checking Expressions:
+--------------------------
+Each of the classes that represents an abstract syntax node for a
+particular form of expression is supposed to contain an implementation
+of the following method:
+
+    public Type typeOf(Context ctxt, TypeEnv locals)
+      throws Failure
+
+This obviously looks a lot like the check() method for statements
+except that the return value is a Type rather than a TypeEnv.  This
+reflects fundamental differences between statements and expressions:
+
+- evaluating an expression will produce a result value of some type,
+  unlike statements, which do not produce values.
+
+- executing a statement may result in an extended environment, unlike
+  expressions, which cannot introduce new local variables.
+
+For example, the following code shows the implementation for typeOf()
+for integer literals, as specified in the IntLit class:
+
+    public Type typeOf(Context ctxt, TypeEnv locals)
+      throws Failure {
+        return Type.INT;
+    }
+
+In this particular case, arguments to typeOf() are not used:
+regardless of the context and local environment in which an integer
+literal appears, we can be sure that it will always produce a value
+of type int, which is represented by the value Type.INT.
+
+On the other hand, the implementation of typeOf() in the class
+LogBinExpr---which covers expressions using logical operators like
+"l && r" or "l || r"---is as follows:
+
+    public Type typeOf(Context ctxt, TypeEnv locals)
+      throws Failure {
+        // Find the type of the left operand:
+        Type leftType = left.typeOf(ctxt, locals);
+  
+        // Check that the left operand produces a value of type boolean:
+        if (!leftType.equals(Type.BOOLEAN)) {
+            ctxt.report(new Failure("LogBinArgsBoolean"));
+        }
+  
+        // Find the type of the right operand:
+        Type rightType = right.typeOf(ctxt, locals);
+  
+        // Check that the right operand produces a value of type boolean:
+        if (!rightType.equals(Type.BOOLEAN)) {
+            ctxt.report(new Failure("LogBinArgsBoolean"));
+        }
+  
+        // Logical operators produce results of type boolean:
+        return type=Type.BOOLEAN;
+    }
+
+The last line here captures the fact that expressions like these
+always produce a boolean result.  In addition, however, the earlier
+lines include recursive typeOf() calls for the left and right
+arguments to ensure that each of those subexpressions is valid, as
+well as tests to ensure that the results produced by those
+subexpressions are themselves boolean values, as required for
+arguments to && and ||.  If either of the arguments does not produce a
+value of the appropriate type, then the line:
+
+   ctxt.report(new Failure("LogBinArgsBoolean"));
+
+is used to register that the program has an error.  Note that the
+"LogBinArgsBoolean" code used here is just the name from our earlier
+list of static checks corresponding to the rules for type checking
+expressions involving logical operators.
+
+Once again, however, the materials that have been provided for this
+assignment only include typeOf() implementations for a limited set of
+cases: for Expr, Id, IntLit, IntToDouble, and LogBinExpr.  So another
+part of your task in this assignment will be to study those examples
+and then add appropriate implementations of typeOf() to implement type
+checking for all of the different forms of abstract syntax node that
+correspond to expressions.
+
+Note that careful use of inheritance can significantly reduce the
+amount of code that you will need to write here.  In the example above
+it made good sense to provide one copy of the code for checking
+logical boolean operators in the LogBinExpr class instead of putting
+copies of the same code in each of the LAnd and LOr classes.  This
+reflects the fact that the type checking rules for && are exactly the
+same as those for ||.  As such, it is appropriate to place common code
+for these operations in LogBinExpr and then let each of LAnd and LOr
+inherit this behavior automatically.
+
+------------------------------------------------------------------------
+Reporting Errors:
+-----------------
+In the code for LogBinExpr shown previously, errors detected in input
+programs were handled by calls of the form:
+
+   ctxt.report(new Failure(codeNameForRuleGoesHere));
+
+This is an appropriate way to handle errors in situations where there
+is an easy way to recover from the error condition.  For example,
+given an expression like "1 && 2",  static analysis can detect that
+the left hand operand is not a boolean and report that as an error.
+But instead of aborting the type checking process at that point, it
+can still continue to look for errors in the right hand operand.
+Detecting multiple errors in a single static analysis phase like this
+is often useful in practice because it can help to reduce the number
+of edit-compile cycles that are needed to get working code.
+
+In some situations, however, there may not be an obvious way to
+recover from an error condition.  The implementation of typeOf() for
+identifiers (in the Id class), for example, is as follows:
+
+    public Type typeOf(Context ctxt, TypeEnv locals)
+      throws Failure {
+        return ctxt.findVar(name, locals).getType();
+    }
+
+This code makes use of the following method in the Context class:
+[Aside: Why is this code separated out from the typeOf() method?
+Hint: This function might also come in handy when you are dealing
+with the implementation of assignment statements ...]
+
+    TypeEnv findVar(String name, TypeEnv locals)
+      throws Failure {
+        // Look for a definition of this variable in the local environment:
+        TypeEnv te = TypeEnv.find(name, locals);
+
+        // If there is no local definition, try the global environment:
+        if (te==null) {
+            te = TypeEnv.find(name, globals);
+        }
+
+        // If we still have not found a definition, then there is an error:
+        if (te==null) {
+            throw new Failure("VarDefined");
+        }
+        return te;
+    }
+
+This code attempts to find an environment entry for a particular
+identifier, first by looking in the local environment, and then in the
+global environment.  But what type should we return if we do not find
+an environment entry?  Of course, we could make an arbitrary choice
+and return Type.INT as a "guess".  This might allow static analysis to
+continue searching the source program for other errors, but it could
+also result in spurious and confusing error conditions.  In an
+expression like "x && y", for example, we would expect static analysis
+to report an error if the variable x were not defined, but we would be
+surprised if it also reported an error for a use of && with an integer
+argument.
+
+As the code above shows, we can avoid the need to make arbitrary
+choices in situations like this by throwing an exception using a
+statement of the form:
+
+   throw new Failure(codeNameForRuleGoesHere);
+
+As a general rule, it is best to use the earlier ctxt.report(...)
+pattern when possible---because that will allow your static analysis
+implementation to catch more bugs in a single compiler run---but it
+is always possible to use the throw ... pattern as a fallback if
+there is no other choice.  Choosing between these patterns will have
+no impact on grading because all of the test programs that we use for
+that will be limited to a single error, but this can be an important
+issue in practical systems.
+
+------------------------------------------------------------------------
+So What is the Assignment?
+--------------------------
+As described above, your assignment for this homework exercise is
+to complete, as best as you can, the implementation of a static
+analysis tool that checks input programs for each of the conditions
+described at the start of this document.
+
+This task should be accomplished by adding appropriate
+implementations for the check() and typeOf() methods that were
+described above.
+
+All of the code that you write should be inserted in to the
+existing classes in the ast folder.  Do NOT add any new source
+files, or modify the provided Static.java file in any way; your
+code may not function correctly in the testbed that is used for
+grading if you do not follow these instructions.  You may choose to
+use your own Parser (with the modifications described above for the
+double type and floating point literals), or you may use the Parser
+that was provided as a solution for HW3.  Your choice of parser
+should not have any bearing on the testing framework, so long as
+the entry point to the parser is a function called Top that returns
+an array of Defn values, as in the original HW3 Template.jj file.
+
+IMPORTANT: You may not be able to implement checks for all of the
+static analysis properties listed at the top of this document in
+the time available.
+
+Testing:
+--------
+As with the previous homework, we have provided a suite of test
+inputs in the tests subfolder, each of which is accompanied by a
+corresponding .ref file that shows the output that is produced by
+the reference solution.  Note that some of these inputs represent
+valid inputs to the static analyzer, but some are are invalid
+inputs.  For the former, the output in the .ref file will be an
+annotated, indented display of the abstract syntax tree for the
+input program.  For the latter, the output will be a suitable error
+diagnostic.  Your program should replicate the behavior of the
+reference solution, matching its output in each case.
+
+The following commands may be of particular use to you during this
+exercise:
+
+- make   will automate the process of running JavaCC to build the
+  parser, and of recompiling the additional Java code after you have
+  made changes.
+
+- ./runTests   will run your static analyzer on all of the provided
+  tests, producing a summary of the results at the end.  Note,
+  however, that you are strongly encouraged to look at and use the
+  tests individually as necessary.  For example, to run test039
+  through your static analyzer, type "java Static tests/test039" and
+  then inspect the output to see if it agrees with what you expect.
+
+- ./showTests  will display a summary of all the tests and your
+  most recent set of results in each case.
+
+It is possible for the static analyzer to detect multiple errors in
+a program within a single run.  The provided tests, however, have
+been designed so that each input program should trigger at most one
+error message.
+
+The test suite contains a total of 110 individual tests, numbered
+from 000 to 109.  The code that is supplied already passes 20 of
+these tests.  Ideally, your final solution should pass all of the
+tests, but I do not expect that all solutions will meet this goal.
+You should also be aware that the supplied test suite is not
+complete.  A larger set of tests will be used for grading, and you
+are welcome to develop additional tests of your own devising to
+ensure that your solution is working correctly.
+
+Although there are 90 failing tests in the supplied code, you will
+often find that adding one (correct) implementation of a typeOf() or
+check() method can fix multiple tests in a single step.  For this
+reason, as you work through this exercise, I encourage you to focus,
+not on the number of tests that you are currently passing, but
+rather on the implementations of check() or typeOf() that you still
+need to add or modify.
+
+Extra credit:
+-------------
+There are a number of additional program properties that we might
+want a static analyzer to check for in addition to those listed at
+the start of this document.  You may obtain extra credit by including
+a list of UP TO FIVE additional example program properties to
+illustrate this point.  These examples must be written in a plain
+text file called "extras.txt" that is included with your submission,
+and, to qualify, each one must include:
+
+- A brief, high-level description of what property will be checked.
+
+- A small example program that illustrates the property.
+
+- A sentence indicating why this check might be important:
+  - Would it help to detect program errors in input programs?
+  - Would it help to clarify ambiguities in the code prior to code
+    generation?
+  - Would it help the compiler to generate more efficient code,
+    either in terms of program execution time or size?
+
+You are not expected to implement any of the properties that you
+describe here.  Note, however, that no credit will be given for
+properties that either duplicate items listed at the start of this
+document, or for items that we could not reasonably hope to check
+during static analysis (e.g., without running the program).
+
+------------------------------------------------------------------------
